@@ -106,7 +106,9 @@ function draw(visited)
     return vis, p
 end
 
+println("Part 1")
 @btime part1()
+println("Part 2")
 @btime part2()
 visted = part2()
 vis, p = draw(visted)
