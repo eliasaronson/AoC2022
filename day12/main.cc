@@ -5,6 +5,14 @@
 #include <thread>
 #include <vector>
 
+#include <boost/config.hpp>
+#include <fstream>
+#include <iostream>
+
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/graph/graph_traits.hpp>
+
 void printm(std::vector<std::vector<char>>& hmap)
 {
     for (auto& v : hmap) {
@@ -22,10 +30,13 @@ std::vector<std::vector<char>> parse(std::string filename)
     std::vector<std::vector<char>> hmap;
 
     std::string line;
+    fs >> line;
     while (!fs.eof()) {
-        fs >> line;
         hmap.push_back(std::vector<char>(line.begin(), line.end()));
+        fs >> line;
     }
+
+    std::cout << hmap.size() << "x" << hmap[0].size() << "\n";
 
     return hmap;
 }
@@ -33,7 +44,7 @@ std::vector<std::vector<char>> parse(std::string filename)
 std::pair<int, int> find_start(std::vector<std::vector<char>>& hmap, char goal)
 {
     for (size_t i = 0; i < hmap.size(); ++i) {
-        for (size_t j = 0; j < hmap.size(); ++j) {
+        for (size_t j = 0; j < hmap[0].size(); ++j) {
             if (hmap[i][j] == goal) {
                 return std::pair<int, int>(i, j);
             }
@@ -52,138 +63,167 @@ template <class T> void printv(std::vector<T> vec)
     std::cout << "\n\r";
 }
 
-typedef std::pair<int, int> coord;
+using namespace boost;
+typedef std::pair<int, int> Edge;
+typedef adjacency_list<listS, vecS, directedS, no_property,
+    property<edge_weight_t, int>>
+    graph_t;
+typedef graph_traits<graph_t>::vertex_descriptor vertex_descriptor;
+typedef graph_traits<graph_t>::edge_descriptor edge_descriptor;
 
-inline void clear(int n_chars)
+void to_dot_file(std::vector<std::vector<char>>& hmap, graph_t g,
+    std::vector<vertex_descriptor> p,
+    property_map<graph_t, edge_weight_t>::type weightmap)
 {
-    for (int i = 0; i < n_chars; ++i) {
-        std::cout << "\b";
+    std::ofstream dot_file("dijkstra-eg.dot");
+
+    dot_file << "digraph D {\n"
+             << "  rankdir=LR\n"
+             << "  size=\"4,3\"\n"
+             << "  ratio=\"fill\"\n"
+             << "  edge[style=\"bold\"]\n"
+             << "  node[shape=\"circle\"]\n";
+
+    std::vector<char> name;
+    for (auto& m : hmap) {
+        for (auto c : m) {
+            name.push_back(c);
+        }
     }
+
+    graph_traits<graph_t>::edge_iterator ei, ei_end;
+    for (boost::tie(ei, ei_end) = edges(g); ei != ei_end; ++ei) {
+        graph_traits<graph_t>::edge_descriptor e = *ei;
+        graph_traits<graph_t>::vertex_descriptor u = source(e, g),
+                                                 v = target(e, g);
+        dot_file << name[u] << " -> " << name[v] << "[label=\""
+                 << get(weightmap, e) << "\"";
+        if (p[v] == u)
+            dot_file << ", color=\"black\"";
+        else
+            dot_file << ", color=\"grey\"";
+        dot_file << "]";
+    }
+    dot_file << "}";
 }
 
-void draw(std::vector<std::vector<char>> hmap, std::vector<coord> prev,
-    coord now, std::vector<char> dirm)
+inline int d1(std::vector<std::vector<char>>& hmap, Edge e)
 {
-    printv(dirm);
-    clear(hmap.size() * (hmap[0].size() + 1));
-
-    int ii = 0;
-    for (auto& c : prev) {
-        hmap[c.first][c.second] = dirm[ii];
-        ii++;
-    }
-    std::cout << "(" << now.first << ", " << now.second << ")\n";
-    hmap[now.first][now.second] = '#';
-
-    printm(hmap);
+    return e.first * hmap[0].size() + e.second;
 }
 
-int search(int n_steps, std::vector<std::vector<char>>& hmap, coord start,
-    coord end, std::vector<coord> prev = std::vector<coord>(),
-    std::vector<char> dirm = std::vector<char>(1, '0'))
+int calc_dist(
+    Edge start, Edge end, graph_t g, std::vector<std::vector<char>>& hmap)
 {
-    if (start == end) {
-        if (n_steps < 32) {
-            std::cout << "N_steps: " << n_steps << "\n\r";
-            std::cout << "Goal!\n";
-            draw(hmap, prev, start, dirm);
-        }
-        return n_steps;
-    }
+    std::vector<vertex_descriptor> p(num_vertices(g));
+    std::vector<int> d(num_vertices(g));
+    vertex_descriptor s = vertex(d1(hmap, start), g);
+    dijkstra_shortest_paths(g, s, predecessor_map(&p[0]).distance_map(&d[0]));
 
-    if (n_steps > 45) {
-        return -1;
-    }
-
-    prev.push_back(start);
-    // draw(hmap, prev, start);
-
-    std::vector<int> dirs(4, -1); // [up, down, left, right]
-
-    coord up_pos = coord(start.first - 1, start.second);
-    if (up_pos.first >= 0 && !std::count(prev.begin(), prev.end(), up_pos)) {
-        if (hmap[up_pos.first][up_pos.second] - hmap[start.first][start.second]
-            <= 1) {
-            dirm.push_back('^');
-            dirs[0] = search(n_steps + 1, hmap, up_pos, end, prev, dirm);
-        }
-    }
-
-    coord down_pos = coord(start.first + 1, start.second);
-    if (down_pos.first < (int)hmap.size()
-        && !std::count(prev.begin(), prev.end(), down_pos)) {
-
-        /*std::cout << "diff: "
-                  << hmap[down_pos.first][down_pos.second]
-                - hmap[start.first][start.second]
-                  << ", char new: " << hmap[down_pos.first][down_pos.second]
-                  << ", char start: " << hmap[start.first][start.second]
-                  << "\n\r";*/
-
-        if (hmap[down_pos.first][down_pos.second]
-                - hmap[start.first][start.second]
-            <= 1) {
-            dirm.push_back('v');
-            dirs[1] = search(n_steps + 1, hmap, down_pos, end, prev, dirm);
-        }
-    }
-
-    coord left_pos = coord(start.first, start.second - 1);
-    if (left_pos.second >= 0
-        && !std::count(prev.begin(), prev.end(), left_pos)) {
-        if (hmap[left_pos.first][left_pos.second]
-                - hmap[start.first][start.second]
-            <= 1) {
-            dirm.push_back('<');
-            dirs[2] = search(n_steps + 1, hmap, left_pos, end, prev, dirm);
-        }
-    }
-
-    coord right_pos = coord(start.first, start.second + 1);
-    if (right_pos.second < (int)hmap[0].size()
-        && !std::count(prev.begin(), prev.end(), right_pos)) {
-        if (hmap[right_pos.first][right_pos.second]
-                - hmap[start.first][start.second]
-            <= 1) {
-            dirm.push_back('>');
-            dirs[3] = search(n_steps + 1, hmap, right_pos, end, prev, dirm);
-        }
-    }
-
-    // printv(dirs);
-    std::vector<int> dirs_filterd;
-    std::copy_if(dirs.begin(), dirs.end(), std::back_inserter(dirs_filterd),
-        [](int i) { return i >= 0; });
-
-    if (dirs_filterd.size() == 0) {
-        return -1;
-    }
-
-    std::sort(dirs_filterd.begin(), dirs_filterd.end());
-
-    return dirs_filterd[0];
+    return d[d1(hmap, end)];
 }
 
-void search_path(std::vector<std::vector<char>>& hmap)
+int part2(Edge end, graph_t g, std::vector<std::vector<char>>& hmap)
 {
-    std::pair<int, int> start = find_start(hmap, 'S');
-    std::pair<int, int> end = find_start(hmap, 'E');
-    std::cout << "Start: (" << start.first << ", " << start.second << ")\n";
-    std::cout << "End: (" << end.first << ", " << end.second << ")\n\r";
-
-    hmap[start.first][start.second] = '~';
-    hmap[end.first][end.second] = '!';
-
-    int n_step = search(0, hmap, start, end);
-
-    std::cout << "Number of steps: " << n_step << "\n\r";
+    std::vector<int> res;
+    for (std::size_t i = 0; i < hmap.size(); ++i) {
+        for (std::size_t j = 0; j < hmap[0].size(); ++j) {
+            if (hmap[i][j] == 'a') {
+                Edge start(i, j);
+                res.push_back(calc_dist(start, end, g, hmap));
+            }
+        }
+    }
+    std::sort(res.begin(), res.end());
+    return res[0];
 }
 
 int main()
 {
-    auto hmap = parse("../inp_t1.txt");
+    auto start = std::chrono::high_resolution_clock::now();
+    auto hmap = parse("../inp_1.txt");
 
-    printm(hmap);
+    std::pair<int, int> start_first = find_start(hmap, 'S');
+    std::pair<int, int> end = find_start(hmap, 'E');
+    // std::cout << "Start: (" << start_first.first << ", " <<
+    // start_first.second
+    // << ")\n";
+    // std::cout << "End: (" << end.first << ", " << end.second << ")\n\r";
 
-    search_path(hmap);
+    hmap[start_first.first][start_first.second] = 'a';
+    hmap[end.first][end.second] = 'z';
+
+    // printm(hmap);
+
+    const int num_nodes = hmap.size() * hmap[0].size();
+
+    graph_t g(num_nodes);
+    property_map<graph_t, edge_weight_t>::type weightmap = get(edge_weight, g);
+
+    for (std::size_t i = 0; i < hmap.size(); ++i) {
+        for (std::size_t j = 0; j < hmap[0].size(); ++j) {
+            Edge start(i, j);
+            Edge left_pos = Edge(start.first, start.second - 1);
+            if (left_pos.second >= 0) {
+                if (hmap[left_pos.first][left_pos.second]
+                        - hmap[start.first][start.second]
+                    <= 1) {
+                    edge_descriptor e;
+                    bool inserted;
+                    boost::tie(e, inserted)
+                        = add_edge(d1(hmap, start), d1(hmap, left_pos), g);
+                    weightmap[e] = 1;
+                }
+            }
+
+            Edge right_pos = Edge(start.first, start.second + 1);
+            if (right_pos.second < (int)hmap[0].size()) {
+                if (hmap[right_pos.first][right_pos.second]
+                        - hmap[start.first][start.second]
+                    <= 1) {
+                    edge_descriptor e;
+                    bool inserted;
+                    boost::tie(e, inserted)
+                        = add_edge(d1(hmap, start), d1(hmap, right_pos), g);
+                    weightmap[e] = 1;
+                }
+            }
+
+            Edge up_pos = Edge(start.first - 1, start.second);
+            if (up_pos.first >= 0) {
+                if (hmap[up_pos.first][up_pos.second]
+                        - hmap[start.first][start.second]
+                    <= 1) {
+                    edge_descriptor e;
+                    bool inserted;
+                    boost::tie(e, inserted)
+                        = add_edge(d1(hmap, start), d1(hmap, up_pos), g);
+                    weightmap[e] = 1;
+                }
+            }
+
+            Edge down_pos = Edge(start.first + 1, start.second);
+            if (down_pos.first < (int)hmap.size()) {
+                if (hmap[down_pos.first][down_pos.second]
+                        - hmap[start.first][start.second]
+                    <= 1) {
+                    edge_descriptor e;
+                    bool inserted;
+                    boost::tie(e, inserted)
+                        = add_edge(d1(hmap, start), d1(hmap, down_pos), g);
+                    weightmap[e] = 1;
+                }
+            }
+        }
+    }
+
+    int d1 = calc_dist(start_first, end, g, hmap);
+    int d2 = part2(end, g, hmap);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration
+        = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "Part 1: " << d1 << "\n";
+    std::cout << "Part 2: " << d2 << "\n";
+    std::cout << duration.count() << " μs\n\r";
 }
