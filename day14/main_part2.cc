@@ -16,7 +16,7 @@ coord to_coord(std::string& s) {
     return coord(std::stoi(lsplit[0]), std::stoi(lsplit[1]));
 }
 
-void draw(World& world, int x_max, int y_max) {
+void draw(World& world, int x_start, int x_max, int y_max) {
     std::vector<std::vector<char>> canv(x_max + 2, std::vector<char>(y_max + 3, '.'));
 
     for (size_t i = 0; i < canv[0].size(); ++i) {
@@ -30,7 +30,9 @@ void draw(World& world, int x_max, int y_max) {
     }
 
     int ix = -1;
-    for (auto& map : world) {
+    for (int i = x_start; i < x_start + x_max; ++i) {
+        std::cout << i << "\n";
+        auto map = world[i];
         ix++;
         for (const auto& [key, value] : map) {
             switch (value) {
@@ -81,22 +83,22 @@ bool sim_grain(World& world, coord start, int x_max, int y_max) {
         }
 
         if (world[pos.first - 1].count(pos.second + 1) == 0) {
-            start = pos;
             pos.first--;
             pos.second++;
         } else if (world[pos.first + 1].count(pos.second + 1) == 0) {
-            start = pos;
             pos.first++;
             pos.second++;
         } else {
-            if (start == pos) {
-                start.second--;
-            }
             world[pos.first][pos.second] = sand;
-            return false;
+            if (pos == start) {
+                return true;
+            } else {
+                return false;
+            }
         }
 
         if (!check_bounds(pos, x_max, y_max)) {
+            std::cout << "Warning! Out of bounds\n";
             return true;
         }
     }
@@ -158,12 +160,16 @@ int main() {
                     return c1.second < c2.second;
                 })->second;
 
+    for (int i = 0; i < x_max * 2; ++i) {
+        rock_idxs.push_back(coord(i, y_max + 2));
+    }
+
     // std::cout << "xmin: " << x_min << ", ymin: " << y_min << ", xmax: " << x_max << ", ymax: " << y_max << "\n";
 
-    int offset = x_min;
+    int offset = 0;
     coord source = coord(500 - offset, 0);
 
-    int x_lim = x_max - offset + 1;
+    int x_lim = 2 * x_max;
     World world(x_lim);
 
     for (auto idx : rock_idxs) {
@@ -174,10 +180,12 @@ int main() {
     auto parsing = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
 
     start = std::chrono::high_resolution_clock::now();
-    int part1 = sim(world, source, x_lim, y_max);
+    int part2 = sim(world, source, x_lim, y_max + 2);
     stop = std::chrono::high_resolution_clock::now();
 
     auto t1 = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+    // draw(world, x_min - 10, x_max - x_min + 20, y_max + 2);
     std::cout << "Parsing: " << parsing.count() << " μs\n";
-    std::cout << "Part 1: " << part1 << " - " << t1.count() << " μs\n\r";
+    std::cout << "Part 2: " << part2 << " - " << t1.count() << " μs\n\r";
 }
