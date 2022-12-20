@@ -32,61 +32,6 @@ std::vector<int> parse(std::string filename) {
     return res;
 }
 
-int part1_wrong_rules(vector<int> coords) {
-    vector<int> coords_org(coords);
-    vector<int> pos(coords.size());
-    const int len = coords_org.size();
-
-    for (size_t i = 0; i < coords_org.size(); ++i) {
-        pos[i] = i;
-    }
-
-    cout << "Val: ";
-    for_each(coords.begin(), coords.end(), [](const int val) { cout << val << ", "; });
-    cout << "\n";
-
-    for (size_t i = 0; i < coords_org.size(); ++i) {
-        const int mov = coords_org[i];
-        const int old_pos = pos[i];
-
-        int dir = (mov < 0) ? -1 : 1;
-        for (RANGE(j, abs(mov))) {
-            auto p = find(pos.begin(), pos.end(), ((abs(mov) / len + 2) * len + old_pos + dir + dir * j) % len);
-
-            cout << "i: " << i << ", j: " << j
-                 << ", idx: " << ((abs(mov) / len + 2) * len + old_pos + dir + dir * j) % len << ", mov: " << mov
-                 << ", pos: " << *p << "\n";
-
-            *p += dir * -1;
-
-            *p = ((len + *p) % len);
-        }
-        pos[i] = ((abs(mov) / mov + 2) * len + pos[i] + mov) % len;
-
-        cout << "Pos: ";
-        for_each(pos.begin(), pos.end(), [](const int val) { cout << val << ", "; });
-        cout << "\nVal: ";
-
-        for (size_t k = 0; k < coords_org.size(); ++k) {
-            coords.at(pos.at(k)) = coords_org.at(k);
-        }
-
-        for_each(coords.begin(), coords.end(), [](const int val) { cout << val << ", "; });
-        cout << "\n\n";
-    }
-
-    for_each(pos.begin(), pos.end(), [](const int val) { cout << val << ", "; });
-    cout << "\n";
-    for (size_t i = 0; i < coords_org.size(); ++i) {
-        coords.at(pos.at(i)) = coords_org.at(i);
-    }
-
-    for_each(coords.begin(), coords.end(), [](const int val) { cout << val << ", "; });
-    cout << "\n";
-
-    return 1;
-}
-
 bigint part1(vector<int> coords, int n_runs = 1, bigint mult = 1) {
     vector<bigint> coords_mul(coords.size());
     for (size_t i = 0; i < coords.size(); ++i) {
